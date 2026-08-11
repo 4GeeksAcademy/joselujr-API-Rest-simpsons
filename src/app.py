@@ -8,11 +8,13 @@ from flask_swagger import swagger
 from flask_cors import CORS
 from utils import APIException, generate_sitemap
 from admin import setup_admin
-from models import db, User
+from models import db, User, Character, Location
+from sqlalchemy import select
 #from models import Person
 
 app = Flask(__name__)
 app.url_map.strict_slashes = False
+
 
 db_url = os.getenv("DATABASE_URL")
 if db_url is not None:
@@ -44,6 +46,61 @@ def handle_hello():
     }
 
     return jsonify(response_body), 200
+
+
+@app.route("/user", methods=["POST"])
+def create_user():
+    data = request.get_json()
+    if not data.get("email") or not data.get("password"):
+        return jsonify ({"error": "Email y password son requeridos"}), 400
+    existe_user = db.session.execute(select(User).where(
+        User.email == data.get("email"))).scalar_one_or_none()
+    if existe_user:
+        return jsonify({"error":"Ya existe un usuario con este email"}), 400
+
+    new_user = User(email=data.get("email"), password=data.get("password"))
+    db.session.add(new_user)
+    db.session.commit()
+    return jsonify(new_user.serialize()), 201
+
+
+@app.route("/character", methods=["POST"])
+def create_character():
+    data = request.get_json()
+    if not data.get("name"):
+        return jsonify({"error": "El nombre es obligatorio"}), 400
+    new_character = Character(name=data.get("name"), quote=data.get("quote", ""))
+    db.session.add(new_character)
+    db.session.commit()
+    return jsonify(new_character.serialize()), 201
+
+
+@app.route("/people", methods=["GET"])
+def get_people():
+    characters = db.session.execute(select(Character)).scalars().all()
+    return jsonify([character.serialize() for character in characters]), 200
+
+
+@app.route("/people/<int:people_id>", methods=["GET"])
+def get_people_id(people_id):
+    person_id = db.session.get(Character, people_id)
+    if person_id is None:
+        return jsonify ({"error": "personaje no existe"}), 404
+    return jsonify (person_id.serialize()), 200
+
+
+
+@app.route("/planets", methods=["GET"])
+def get_planets():
+    locations = db.session.execute(select(Location)).scalars().all()
+    return jsonify([location.serialize() for location in locations]), 200
+
+@app.route("/planets/<int:planets_id>", methods=["GET"])
+def get_planet_id(planets_id):
+    location_id = db.session.get(Location, planets_id)
+    if location_id is None:
+        return jsonify ({"error": "esta locacion no existe"}), 404
+    return jsonify (location_id.serialize()), 200
 
 # this only runs if `$ python src/app.py` is executed
 if __name__ == '__main__':
