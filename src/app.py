@@ -8,7 +8,7 @@ from flask_swagger import swagger
 from flask_cors import CORS
 from utils import APIException, generate_sitemap
 from admin import setup_admin
-from models import db, User, Character, Location
+from models import db, User, Character, Location, Favorite_location, Favorite_character
 from sqlalchemy import select
 #from models import Person
 
@@ -46,6 +46,8 @@ def handle_hello():
     }
 
     return jsonify(response_body), 200
+
+
 
 
 @app.route("/user", methods=["POST"])
@@ -101,6 +103,54 @@ def get_planet_id(planets_id):
     if location_id is None:
         return jsonify ({"error": "esta locacion no existe"}), 404
     return jsonify (location_id.serialize()), 200
+
+
+@app.route("/users", methods=["GET"])
+def get_user_all():
+    users = db.session.execute(select(User)).scalars().all()
+    return jsonify([user.serialize() for user in users]), 200
+
+
+@app.route("/users/favorites/<int:user_id>", methods=["GET"])
+def user_favorites(user_id):
+    location_fav = db.session.execute(select(Favorite_location).where(Favorite_location.user_id == user_id)).scalars().all()
+    character_fav = db.session.execute(select(Favorite_character).where(Favorite_character.user_id == user_id)).scalars().all()
+    return jsonify ({
+            "favorite_location": [location.serialize() for location in location_fav],
+            "favorite_character": [character.serialize() for character in character_fav]
+            }), 200
+
+        
+@app.route("/favorite/planet/<int:planet_id>", methods=["POST"])
+def add_favorite_planet(planet_id):
+    data = request.get_json()
+    if not data.get("user_id"):
+        return jsonify({"error": "es obligatorio el user_id"}), 400
+    location = db.session.get(Location, planet_id)
+    if location is None:
+        return jsonify({"error": "planeta no existe"}), 404
+    new_favorite_planet = Favorite_location(user_id= data.get("user_id"), location_id=planet_id)
+    db.session.add(new_favorite_planet)
+    db.session.commit()
+    return jsonify(new_favorite_planet.serialize()), 201
+   
+
+@app.route("/favorite/people/<int:people_id>", methods=["POST"])
+def add_favorite_people(people_id):
+    data = request.get_json()
+    if not data.get("user_id"):
+        return jsonify({"error": "es obligatorio el user_id"}), 400
+    character = db.session.get(Character, people_id)
+    if character is None:
+        return jsonify({"error": "personaje no existe"}), 404
+    new_favorite_character = Favorite_character(user_id= data.get("user_id"), character_id=people_id)
+    db.session.add(new_favorite_character)
+    db.session.commit()
+    return jsonify(new_favorite_character.serialize()), 201
+
+    
+
+
 
 # this only runs if `$ python src/app.py` is executed
 if __name__ == '__main__':
